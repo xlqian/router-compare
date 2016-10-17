@@ -27,7 +27,7 @@ def _persist_to_csv(file_name, data_dict, data_headers):
             writer.writerow(a_row)
 
 def get_results_as_csv_for_a_mode(test_results, mode):
-    logger.info("Génération de fichiers csv avec les résultats des tests pour le mode " + mode)
+    logger.info("Export results to csv for the {} mode".format(mode))
     results_filtered_by_mode = [a_test for a_test in test_results if a_test['mode']==mode]
 
     _create_results_dir_if_needed("test_results")
@@ -40,6 +40,7 @@ def get_results_as_csv_for_a_mode(test_results, mode):
 
 
 def get_results_as_box_for_a_mode(test_results, mode):
+    logger.info("Export results to boxplot for the {} mode".format(mode))
     results_filtered_by_mode = [a_test for a_test in test_results if a_test['mode']==mode]
     _create_results_dir_if_needed("test_results")
     _persist_to_box("test_results/{}_durations_deviations.svg".format(mode), results_filtered_by_mode, "duration", mode)

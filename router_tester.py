@@ -23,7 +23,7 @@ def get_test_cases_from_csv_file(csv_file) :
             yield test_case
 
 def add_deviation_to_google(result_list) :
-    logger.info("Calcul des différences de distances et de durée en prenant google comme référence")
+    logger.info("Compute duration & distance deviations to Google")
     result_list = [dict({'kraken_distance_deviation_with_google' : 100 * (a_test_result["kraken_distance"] - a_test_result["google_distance"]) /a_test_result["google_distance"]}, **a_test_result) for a_test_result in result_list]
     result_list = [dict({'kraken_duration_deviation_with_google' : 100 * (a_test_result["kraken_duration"] - a_test_result["google_duration"]) / a_test_result["google_duration"]}, **a_test_result) for a_test_result in result_list]
     result_list = [dict({'valhalla_distance_deviation_with_google' : 100 * (a_test_result["valhalla_distance"] - a_test_result["google_distance"]) /a_test_result["google_distance"]}, **a_test_result) for a_test_result in result_list]
@@ -31,12 +31,12 @@ def add_deviation_to_google(result_list) :
     return result_list
 
 def remove_not_consistent_test_retults(result_list) :
-    logger.info("Suppression des résultats de tests pour lesquels des valeurs sont manquantes")
+    logger.info("Remove non consistent test results")
     result_list = [a_test_result for a_test_result in result_list if "kraken_duration" in a_test_result and "valhalla_duration" in a_test_result and "google_duration" in a_test_result]
     return result_list
 
 def order_test_results(result_list, order_criteria) :
-    logger.info("Tri des résultats par distance à vol d'oiseau")
+    logger.info("Sort results")
     return sorted(result_list, key=lambda result: float(result[order_criteria]))
 
 if __name__ == '__main__':
@@ -44,7 +44,7 @@ if __name__ == '__main__':
 
     for a_test_case in get_test_cases_from_csv_file("./test_cases/auvergne.csv"):
         test_result = dict(a_test_case)
-        logger.info("Test en cours sur l'élément " + a_test_case['id'])
+        logger.info("Testing element " + a_test_case['id'])
         test_router_kraken = router.get_distance_and_duration_from_navitia(a_test_case["from"], a_test_case['to'], a_test_case["mode"])
         test_router_valhalla = router.get_distance_and_duration_from_navitia(a_test_case["from"], a_test_case['to'], a_test_case["mode"], additionnal_params={"_override_scenario": "experimental"})
         test_router_google = router.get_distance_and_duration_from_google_directions(a_test_case["from"], a_test_case['to'], a_test_case["mode"])
