@@ -3,8 +3,13 @@
 import logging
 import csv
 import pygal
+import os
 
 logger = logging.getLogger(__name__)
+
+def _create_results_dir_if_needed(dir_path):
+    if not os.path.isdir(dir_path):
+        os.mkdir(dir_path)
 
 def _persist_to_box(file_name, data_dict, deviation_type, mode):
     box_plot = pygal.Box()
@@ -25,6 +30,8 @@ def get_results_as_csv_for_a_mode(test_results, mode):
     logger.info("Génération de fichiers csv avec les résultats des tests pour le mode " + mode)
     results_filtered_by_mode = [a_test for a_test in test_results if a_test['mode']==mode]
 
+    _create_results_dir_if_needed("test_results")
+
     fieldnames = ['id', 'kraken_distance', 'valhalla_distance', 'google_distance']
     _persist_to_csv("test_results/{}_distances.csv".format(mode), results_filtered_by_mode, fieldnames)
 
@@ -34,5 +41,6 @@ def get_results_as_csv_for_a_mode(test_results, mode):
 
 def get_results_as_box_for_a_mode(test_results, mode):
     results_filtered_by_mode = [a_test for a_test in test_results if a_test['mode']==mode]
+    _create_results_dir_if_needed("test_results")
     _persist_to_box("test_results/{}_durations_deviations.svg".format(mode), results_filtered_by_mode, "duration", mode)
     _persist_to_box("test_results/{}_distances_deviations.svg".format(mode), results_filtered_by_mode, "distance", mode)

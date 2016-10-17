@@ -32,7 +32,7 @@ def add_deviation_to_google(result_list) :
 
 def remove_not_consistent_test_retults(result_list) :
     logger.info("Suppression des résultats de tests pour lesquels des valeurs sont manquantes")
-    result_list = [a_test_result for a_test_result in result_list if a_test_result["kraken_duration"] and a_test_result["valhalla_duration"] and a_test_result["google_duration"]]
+    result_list = [a_test_result for a_test_result in result_list if "kraken_duration" in a_test_result and "valhalla_duration" in a_test_result and "google_duration" in a_test_result]
     return result_list
 
 def order_test_results(result_list, order_criteria) :
