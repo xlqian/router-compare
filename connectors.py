@@ -24,7 +24,7 @@ def get_distance_and_duration_from_navitia(from_tuple, to_tuple, mode, coverage=
     Call navitia to compute a non pt journey and extract duration & distance from the appropriate section
     """
     if not mode_is_valid(mode):
-        logger.error("The mode {} is not unknown. The allowed modes are walking, bicycling, driving".format(mode))
+        logger.error("The mode {} is not valid. The allowed modes are walking, bicycling, driving".format(mode))
         return
 
     fallback_mode = mode_mapping[mode]
@@ -62,7 +62,7 @@ def get_distance_and_duration_from_google_directions(from_tuple, to_tuple, mode)
     """
 
     if not mode_is_valid(mode):
-        logger.error("The mode {} is not unknown. The allowed modes are walking, bicycling, driving".format(mode))
+        logger.error("The mode {} is not valid. The allowed modes are walking, bicycling, driving".format(mode))
         return
 
     origin = "{},{}".format(from_tuple[0], from_tuple[1])
@@ -83,6 +83,9 @@ def get_distance_and_duration_from_google_directions(from_tuple, to_tuple, mode)
     return {'distance' : google_response['routes'][0]['legs'][0]['distance']['value'], 'duration': google_response['routes'][0]['legs'][0]['duration']['value']}
 
 def get_crow_fly_distance(from_tuple,to_tuple):
+    """
+    Uses the Haversine formmula to compute distance (https://en.wikipedia.org/wiki/Haversine_formula#The_haversine_formula)
+    """
     lat1, lon1 = from_tuple
     lat2, lon2 = to_tuple
 
