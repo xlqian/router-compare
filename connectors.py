@@ -3,6 +3,7 @@
 import json
 import requests
 import logging
+import math
 import auth_params
 
 GOOGLE_TOKEN = auth_params.google_api_key
@@ -23,7 +24,7 @@ def get_distance_and_duration_from_navitia(from_tuple, to_tuple, mode, coverage=
     Call navitia to compute a non pt journey and extract duration & distance from the appropriate section
     """
     if not mode_is_valid(mode):
-        logger.error("Le mode {} est inconnu - valeurs acceptées : walking, biking, driving".format(mode))
+        logger.error("The mode {} is not valid. The allowed modes are walking, bicycling, driving".format(mode))
         return
 
     fallback_mode = mode_mapping[mode]
@@ -61,7 +62,7 @@ def get_distance_and_duration_from_google_directions(from_tuple, to_tuple, mode)
     """
 
     if not mode_is_valid(mode):
-        logger.error("Le mode {} est inconnu - valeurs acceptées : walking, biking, driving".format(mode))
+        logger.error("The mode {} is not valid. The allowed modes are walking, bicycling, driving".format(mode))
         return
 
     origin = "{},{}".format(from_tuple[0], from_tuple[1])
@@ -72,11 +73,33 @@ def get_distance_and_duration_from_google_directions(from_tuple, to_tuple, mode)
     call = requests.get(url, params=url_params)
     logger.debug(call.url)
     if call.status_code != 200 :
-        logger.error("Appel à l'API Google KO - status code : {}".format(call.status_code))
+        logger.error("Google API error - status code : {}".format(call.status_code))
         return
     google_response = call.json()
     if google_response['status'] != "OK" :
-        logger.error("Appel à l'API Google KO - message : {}".format(google_response['status']))
+        logger.error("Google API error - message : {}".format(google_response['status']))
         return
 
     return {'distance' : google_response['routes'][0]['legs'][0]['distance']['value'], 'duration': google_response['routes'][0]['legs'][0]['duration']['value']}
+
+def get_crow_fly_distance(from_tuple,to_tuple):
+    """
+    Uses the Haversine formmula to compute distance (https://en.wikipedia.org/wiki/Haversine_formula#The_haversine_formula)
+    """
+    lat1, lon1 = from_tuple
+    lat2, lon2 = to_tuple
+
+    lat1 = float(lat1)
+    lat2 = float(lat2)
+    lon1 = float(lon1)
+    lon2 = float(lon2)
+
+    radius = 6371 # km
+
+    dlat = math.radians(lat2-lat1)
+    dlon = math.radians(lon2-lon1)
+    a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1))* math.cos(math.radians(lat2)) * math.sin(dlon/2) * math.sin(dlon/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    d = radius * c
+
+    return {'distance' : d}
