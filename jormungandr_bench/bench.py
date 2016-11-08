@@ -106,10 +106,6 @@ def plot(array1, array2):
     plt.plot(array2_np, 'b--')
     plt.show()
 
-def parse_args():
-    from docopt import docopt
-    return docopt(__doc__, version='Jormungandr Bench V0.0.1')
-
 def bench(args):
     reqs = parse_request_csv(args['--input'])
     extra_args = args['--extra-args'] or ''
@@ -138,6 +134,10 @@ def replot(args):
     time_arry1 = get_times(file1)
     time_arry2 = get_times(file2)
     plot(time_arry1, time_arry2)    
+
+def parse_args():
+    from docopt import docopt
+    return docopt(__doc__, version='Jormungandr Bench V0.0.1')
 
 def main():
     args = parse_args()
