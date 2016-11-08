@@ -97,13 +97,14 @@ def call_jormun(reqs, scenario, extra_args):
             collapsed_time.append(t)
     return collapsed_time    
 
-def plot(array1, array2):
+def plot(array1, array2, label1='', label2=''):
     import numpy
     import matplotlib.pyplot as plt
     array1_np = numpy.array(array1)
     array2_np = numpy.array(array2)
-    plt.plot(array1_np, 'r--')
-    plt.plot(array2_np, 'b--')
+    l1, = plt.plot(array1_np, 'r--', label=label1)
+    l2, = plt.plot(array2_np, 'b--', label=label2)
+    plt.legend(handles=[l1, l2])
     plt.show()
 
 def bench(args):
@@ -111,7 +112,7 @@ def bench(args):
     extra_args = args['--extra-args'] or ''
     collapsed_time_new_default = call_jormun(reqs, 'new_default', extra_args)
     collapsed_time_experimental = call_jormun(reqs, 'experimental', extra_args)
-    plot(collapsed_time_new_default, collapsed_time_experimental)
+    plot(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
 
 def get_times(csv_path):
     times = []
@@ -133,7 +134,7 @@ def replot(args):
     file2 = files[1]
     time_arry1 = get_times(file1)
     time_arry2 = get_times(file2)
-    plot(time_arry1, time_arry2)    
+    plot(time_arry1, time_arry2,file1, file2)    
 
 def parse_args():
     from docopt import docopt
