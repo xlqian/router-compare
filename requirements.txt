@@ -2,4 +2,5 @@ pygal==1.6.2
 requests>=2.0.0
 tqdm
 docopt
+numpy
 

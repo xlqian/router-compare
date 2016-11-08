@@ -25,16 +25,9 @@ import datetime
 import numpy
 import tqdm
 import logging
-from config import JORMUN_URL, COVERAGE
+import pygal
 
-# setup logger
-logger = logging.getLogger(__file__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter=logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+from config import JORMUN_URL, COVERAGE, logger
 
 def parse_request_csv(csv_path):
     logger.info('Start parsing csv: {}'.format(csv_path))
@@ -88,22 +81,29 @@ def call_jormun(reqs, scenario, extra_args):
             collapsed_time.append(t)
     return collapsed_time    
 
-def plot(array1, array2, label1='', label2=''):
-    import pygal
+def plot_per_request(array1, array2, label1='', label2=''):
     line_chart = pygal.Line(show_x_labels=False)
     line_chart.title = 'Jormun Bench (in ms)'
     line_chart.x_labels = map(str, range(0, len(array1)))
     line_chart.add(label1, array1)
     line_chart.add(label2, array2)
-    line_chart.render_to_file('output.svg')
+    line_chart.render_to_file('output_per_request.svg')
+
+def plot_normalized_box(array1, array2, label1='', label2=''):
+    import numpy as np
+    box = pygal.Box()
+    box.title = 'Jormun Bench Box Comparaison (in ms)'
+    box.add('Time Ratio: {}/{}'.format(label2, label1), np.array(array2) / np.array(array1))
+    box.render_to_file('output_box.svg')
 
 def bench(args):
     reqs = parse_request_csv(args['--input'])
     extra_args = args['--extra-args'] or ''
     collapsed_time_new_default = call_jormun(reqs, 'new_default', extra_args)
     collapsed_time_experimental = call_jormun(reqs, 'experimental', extra_args)
-    plot(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
-
+    plot_per_request(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+    plot_normalized_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+    
 def get_times(csv_path):
     times = []
     try:
@@ -124,7 +124,8 @@ def replot(args):
     file2 = files[1]
     time_arry1 = get_times(file1)
     time_arry2 = get_times(file2)
-    plot(time_arry1, time_arry2,file1, file2)    
+    plot_per_request(time_arry1, time_arry2,file1, file2)    
+    plot_normalized_box(time_arry1, time_arry2,file1, file2)    
 
 def parse_args():
     from docopt import docopt
