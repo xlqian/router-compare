@@ -24,29 +24,20 @@ import json
 import datetime
 import numpy
 import tqdm
+import logging
 from config import JORMUN_URL, COVERAGE
 
-
-class bcolors:
-    INFO = '\033[95m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-def print_info(string):
-    print(bcolors.INFO+string+bcolors.ENDC)
-
-def print_ok(string):
-    print(bcolors.OKGREEN+string+bcolors.ENDC)
-
-def print_err(string):
-    print(bcolors.FAIL+string+bcolors.ENDC)
+# setup logger
+logger = logging.getLogger(__file__)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter=logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 def parse_request_csv(csv_path):
-    print_ok('Start parsing csv: {}'.format(csv_path))
+    logger.info('Start parsing csv: {}'.format(csv_path))
     import csv
     import string
     requests = []
@@ -59,10 +50,10 @@ def parse_request_csv(csv_path):
                                 string.strip(row[' Target'], ' '), 
                                 row[' Day'], 
                                 row[' Hour']))
-        print_ok('Finish parsing: {} requests'.format(len(requests)))       
+        logger.info('Finish parsing: {} requests'.format(len(requests)))       
     except Exception as e:
         import sys
-        print_err('Error occurred when parsing csv: ' + str(e))
+        logger.error('Error occurred when parsing csv: ' + str(e))
     return requests
 
 def get_coverage_start_production_date():
@@ -84,7 +75,7 @@ def _call_jormun(url, times=1):
 
 def call_jormun(reqs, scenario, extra_args):
     start_prod_date = get_coverage_start_production_date()
-    print_info("calling scenario: " + scenario)
+    logger.info("calling scenario: " + scenario)
     collapsed_time = []
     with open("{}.csv".format(scenario), 'w') as f:
         print("No,url,collapsed time", file=f)
@@ -98,14 +89,13 @@ def call_jormun(reqs, scenario, extra_args):
     return collapsed_time    
 
 def plot(array1, array2, label1='', label2=''):
-    import numpy
-    import matplotlib.pyplot as plt
-    array1_np = numpy.array(array1)
-    array2_np = numpy.array(array2)
-    l1, = plt.plot(array1_np, 'r--', label=label1)
-    l2, = plt.plot(array2_np, 'b--', label=label2)
-    plt.legend(handles=[l1, l2])
-    plt.show()
+    import pygal
+    line_chart = pygal.Line(show_x_labels=False)
+    line_chart.title = 'Jormun Bench (in ms)'
+    line_chart.x_labels = map(str, range(0, len(array1)))
+    line_chart.add(label1, array1)
+    line_chart.add(label2, array2)
+    line_chart.render_to_file('output.svg')
 
 def bench(args):
     reqs = parse_request_csv(args['--input'])
@@ -122,10 +112,10 @@ def get_times(csv_path):
             reader = csv.DictReader(csvfile)
             for row in reader:
                 times.append(float(row['collapsed time']))
-        print_ok('Finish parsing: {}'.format(csv_path))       
+        logger.info('Finish parsing: {}'.format(csv_path))       
     except Exception as e:
         import sys
-        print_err('Error occurred when parsing csv: ' + str(e))
+        logger.err('Error occurred when parsing csv: ' + str(e))
     return times
     
 def replot(args):
