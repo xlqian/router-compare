@@ -35,12 +35,12 @@ def parse_request_csv(csv_path):
     import string
     requests = []
     try:
-        with open(csv_path, 'rb') as csvfile:
+        with open(csv_path) as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 if row[' arrival'] != '-1':
-                    requests.append((string.strip(row['Start'], ' '), 
-                                string.strip(row[' Target'], ' '), 
+                    requests.append((row['Start'].strip(' '), 
+                                row[' Target'].strip(' '), 
                                 row[' Day'], 
                                 row[' Hour']))
         logger.info('Finish parsing: {} requests'.format(len(requests)))       
@@ -51,7 +51,7 @@ def parse_request_csv(csv_path):
 
 def get_coverage_start_production_date():
     r = requests.get("{}/coverage/{}".format(JORMUN_URL, COVERAGE))
-    j = json.loads(r.content)
+    j = r.json()
     return datetime.datetime.strptime(j['regions'][0]['start_production_date'], '%Y%m%d')
 
 def get_request_datetime(start_prod_date, days_shift, seconds):
@@ -63,7 +63,7 @@ def _call_jormun(url, times=1):
     for _ in range(times): 
         r = requests.get(url)
     time2 = time.time()
-    collapsed_time = (time2-time1)*1000.0/times    
+    collapsed_time = (time2-time1)*1000.0/times  
     return r, collapsed_time
 
 def call_jormun(reqs, scenario, extra_args):
@@ -76,7 +76,9 @@ def call_jormun(reqs, scenario, extra_args):
             req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
             req_url = "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
                 JORMUN_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)
-            _, t = _call_jormun(req_url, 1)
+            ret, t = _call_jormun(req_url, 1)
+            if ret.status_code != 200:
+                logger.error("calling error: {} {}".format(i, req_url))
             print("{},{},{}".format(i, req_url, t), file=f)
             collapsed_time.append(t)
     return collapsed_time    
