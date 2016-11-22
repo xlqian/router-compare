@@ -70,13 +70,13 @@ def router_compare(test_case_file):
 
     test_result_list = order_test_results(test_result_list, "superman_distance")
 
-    for mode in ('walking', 'driving', 'bicyling'):
+    for mode in ('walking', 'driving', 'bicycling'):
         export.get_results_as_csv_for_a_mode(test_result_list, mode)
 
     test_result_list = remove_not_consistent_test_results(test_result_list)
     test_result_list = add_deviation_to_google(test_result_list)
 
-    for mode in ('walking', 'driving', 'bicyling'):
+    for mode in ('walking', 'driving', 'bicycling'):
         export.get_results_as_box_for_a_mode(test_result_list, mode)
 
 
