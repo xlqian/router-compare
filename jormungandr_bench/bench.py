@@ -30,10 +30,10 @@ import os
 from config import logger
 import config
 
-NAVITIA_API_URL = os.envrion.get('NAVITIA_API_URL') 
+NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
 NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
 
-COVERAGE = os.envrion.get('COVERAGE')
+COVERAGE = os.getenv('COVERAGE')
 COVERAGE = COVERAGE if COVERAGE else config.COVERAGE 
 
 def parse_request_csv(csv_path):
@@ -142,6 +142,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    logger.info('Running Benchmark on {}/{}'.format(NAVITIA_API_URL, COVERAGE))
     if args.get('bench'):
         bench(args)
     if args.get('replot'):
