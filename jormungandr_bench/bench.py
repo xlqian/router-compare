@@ -60,7 +60,7 @@ def parse_request_csv(csv_path):
     return requests
 
 def get_coverage_start_production_date():
-    r = requests.get("{}/coverage/{}".format(NAVITIA_API_URL, COVERAGE))
+    r = requests.get("{}/coverage/{}".format(NAVITIA_API_URL, COVERAGE), headers={'Authorization': TOKEN})
     j = r.json()
     return datetime.datetime.strptime(j['regions'][0]['start_production_date'], '%Y%m%d')
 
