@@ -80,7 +80,11 @@ def call_jormun(reqs, scenario, extra_args):
     start_prod_date = get_coverage_start_production_date()
     logger.info("calling scenario: " + scenario)
     collapsed_time = []
-    with open("{}.csv".format(scenario), 'w') as f:
+    output_dir = "bench_output/{}/{}".format(COVERAGE,
+                                             datetime.datetime.now().strftime("%Y%m%dT%H%M"))
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(os.path.join(output_dir, "{}.csv".format(scenario)), 'w') as f:
         print("No,url,collapsed time", file=f)
         for i, r in tqdm.tqdm(list(enumerate(reqs))):
             req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
