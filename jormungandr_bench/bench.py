@@ -81,7 +81,7 @@ def call_jormun(reqs, scenario, extra_args):
     logger.info("calling scenario: " + scenario)
     collapsed_time = []
     output_dir = "bench_output/{}/{}".format(COVERAGE,
-                                             datetime.datetime.now().strftime("%Y%m%dT%H%M"))
+                                             datetime.datetime.now().strftime("%Y%m%dT%H%M%S"))
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     with open(os.path.join(output_dir, "{}.csv".format(scenario)), 'w') as f:
