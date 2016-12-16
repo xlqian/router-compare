@@ -26,8 +26,18 @@ import numpy
 import tqdm
 import logging
 import pygal
+import os
+from config import logger
+import config
 
-from config import JORMUN_URL, COVERAGE, logger
+NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
+NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
+
+COVERAGE = os.getenv('COVERAGE')
+COVERAGE = COVERAGE if COVERAGE else config.COVERAGE 
+
+TOKEN = os.getenv('TOKEN')
+TOKEN = TOKEN if TOKEN else config.TOKEN     
 
 def parse_request_csv(csv_path):
     logger.info('Start parsing csv: {}'.format(csv_path))
@@ -50,7 +60,7 @@ def parse_request_csv(csv_path):
     return requests
 
 def get_coverage_start_production_date():
-    r = requests.get("{}/coverage/{}".format(JORMUN_URL, COVERAGE))
+    r = requests.get("{}/coverage/{}".format(NAVITIA_API_URL, COVERAGE))
     j = r.json()
     return datetime.datetime.strptime(j['regions'][0]['start_production_date'], '%Y%m%d')
 
@@ -61,7 +71,7 @@ def _call_jormun(url, times=1):
     import time
     time1 = time.time()
     for _ in range(times): 
-        r = requests.get(url)
+        r = requests.get(url, headers={'Authorization': TOKEN})
     time2 = time.time()
     collapsed_time = (time2-time1)*1000.0/times  
     return r, collapsed_time
@@ -75,7 +85,7 @@ def call_jormun(reqs, scenario, extra_args):
         for i, r in tqdm.tqdm(list(enumerate(reqs))):
             req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
             req_url = "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
-                JORMUN_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)
+                NAVITIA_API_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)
             ret, t = _call_jormun(req_url, 1)
             if ret.status_code != 200:
                 logger.error("calling error: {} {}".format(i, req_url))
@@ -135,6 +145,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    logger.info('Running Benchmark on {}/{}'.format(NAVITIA_API_URL, COVERAGE))
     if args.get('bench'):
         bench(args)
     if args.get('replot'):
