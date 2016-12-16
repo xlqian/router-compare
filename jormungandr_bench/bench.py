@@ -36,6 +36,9 @@ NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL
 COVERAGE = os.getenv('COVERAGE')
 COVERAGE = COVERAGE if COVERAGE else config.COVERAGE 
 
+TOKEN = os.getenv('TOKEN')
+TOKEN = TOKEN if TOKEN else config.TOKEN     
+
 def parse_request_csv(csv_path):
     logger.info('Start parsing csv: {}'.format(csv_path))
     import csv
@@ -68,7 +71,7 @@ def _call_jormun(url, times=1):
     import time
     time1 = time.time()
     for _ in range(times): 
-        r = requests.get(url)
+        r = requests.get(url, headers={'Authorization': TOKEN})
     time2 = time.time()
     collapsed_time = (time2-time1)*1000.0/times  
     return r, collapsed_time
