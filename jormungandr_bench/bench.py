@@ -39,8 +39,9 @@ COVERAGE = COVERAGE if COVERAGE else config.COVERAGE
 TOKEN = os.getenv('TOKEN')
 TOKEN = TOKEN if TOKEN else config.TOKEN     
 
-OUTPUT_DIR = "Navitia-Multimodal-Bench-Output/{}/{}".format(COVERAGE,
-                                                            datetime.datetime.now().strftime("%Y%m%dT%H%M%S"))
+OUTPUT_DIR = os.getenv('OUTPUT_DIR')
+OUTPUT_DIR = OUTPUT_DIR if OUTPUT_DIR else config.OUTPUT_DIR    
+
 def parse_request_csv(csv_path):
     logger.info('Start parsing csv: {}'.format(csv_path))
     import csv
