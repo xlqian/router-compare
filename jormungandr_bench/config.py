@@ -1,7 +1,9 @@
+import datetime
+
 NAVITIA_API_URL = 'http://127.0.0.1:5000/v1'
 COVERAGE = 'stif'
 TOKEN = ''
-
+OUTPUT_DIR = "Navitia-Multimodal-Bench-Output/{}/{}".format(COVERAGE, datetime.datetime.now().strftime("%Y%m%dT%H%M%S"))
 # setup logger
 import logging
 logger = logging.getLogger('bench.py')

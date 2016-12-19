@@ -39,6 +39,9 @@ COVERAGE = COVERAGE if COVERAGE else config.COVERAGE
 TOKEN = os.getenv('TOKEN')
 TOKEN = TOKEN if TOKEN else config.TOKEN     
 
+OUTPUT_DIR = os.getenv('OUTPUT_DIR')
+OUTPUT_DIR = OUTPUT_DIR if OUTPUT_DIR else config.OUTPUT_DIR    
+
 def parse_request_csv(csv_path):
     logger.info('Start parsing csv: {}'.format(csv_path))
     import csv
@@ -80,11 +83,11 @@ def call_jormun(reqs, scenario, extra_args):
     start_prod_date = get_coverage_start_production_date()
     logger.info("calling scenario: " + scenario)
     collapsed_time = []
-    output_dir = "bench_output/{}/{}".format(COVERAGE,
-                                             datetime.datetime.now().strftime("%Y%m%dT%H%M%S"))
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    with open(os.path.join(output_dir, "{}.csv".format(scenario)), 'w') as f:
+
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    with open(os.path.join(OUTPUT_DIR, "{}.csv".format(scenario)), 'w') as f:
         print("No,url,collapsed time", file=f)
         for i, r in tqdm.tqdm(list(enumerate(reqs))):
             req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
