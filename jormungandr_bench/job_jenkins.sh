@@ -13,15 +13,15 @@ export LAUNCH_DATETIME=`date "+%Y%m%dT%H%M"`
 multimodal='first_section_mode[]=walking&first_section_mode[]=bike&first_section_mode[]=car&last_section_mode[]=walking'
 
 export COVERAGE='fr-auv'
-export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/$COVERAGE/$LAUNCH_DATETIME
+export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/output/$COVERAGE/$LAUNCH_DATETIME
 python bench.py bench --input bench_data/$COVERAGE/benchmark_requests.csv -a $multimodal
 
 export COVERAGE='stif'
-export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/$COVERAGE/$LAUNCH_DATETIME
+export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/output/$COVERAGE/$LAUNCH_DATETIME
 python bench.py bench --input bench_data/$COVERAGE/benchmark_requests.csv -a $multimodal
 
 export COVERAGE='fr-cen'
-export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/$COVERAGE/$LAUNCH_DATETIME
+export OUTPUT_DIR=$DISTANT_BENCH_OUTPUT/output/$COVERAGE/$LAUNCH_DATETIME
 python bench.py bench --input bench_data/$COVERAGE/benchmark_requests.csv -a $multimodal
 
 
