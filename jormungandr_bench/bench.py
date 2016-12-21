@@ -170,7 +170,7 @@ def plot_latest(args):
         latest_bench_outputs = get_latest_bench_output(cov, n)
         box = pygal.Box(box_mode="tukey")
         box.title = cov.split('/')[2]
-        for output in latest_bench_outputs:
+        for output in latest_bench_outputs[::-1]:
             time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
             time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
             box.add(output.split('/')[3], numpy.array(time_array1) / numpy.array(time_array2))
