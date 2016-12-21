@@ -6,6 +6,7 @@ Usage:
   bench.py --version
   bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS]
   bench.py replot [<file> <file>]
+  bench.py plot-latest N
    
 Options:
   -h --help                             Show this screen.
@@ -14,9 +15,10 @@ Options:
   -a <ARGS>, --extra-args=<ARGS>        Extra args for the request
 
 Example:
-  ./bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
-  ./bench replot new_default.csv experimental.csv
-  ./bench replot 
+  bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
+  bench.py replot new_default.csv experimental.csv
+  bench.py plot-latest 30
+   
 """
 from __future__ import print_function
 import requests
@@ -29,6 +31,7 @@ import pygal
 import os
 from config import logger
 import config
+from glob import glob
 
 NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
 NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
@@ -38,6 +41,9 @@ COVERAGE = COVERAGE if COVERAGE else config.COVERAGE
 
 TOKEN = os.getenv('TOKEN')
 TOKEN = TOKEN if TOKEN else config.TOKEN     
+
+DISTANT_BENCH_OUTPUT = os.getenv('DISTANT_BENCH_OUTPUT')
+DISTANT_BENCH_OUTPUT = DISTANT_BENCH_OUTPUT if DISTANT_BENCH_OUTPUT else config.DISTANT_BENCH_OUTPUT    
 
 OUTPUT_DIR = os.getenv('OUTPUT_DIR')
 OUTPUT_DIR = OUTPUT_DIR if OUTPUT_DIR else config.OUTPUT_DIR    
@@ -146,6 +152,30 @@ def replot(args):
     plot_per_request(time_arry1, time_arry2,file1, file2)    
     plot_normalized_box(time_arry1, time_arry2,file1, file2)    
 
+def get_benched_coverage_from_output():
+    return glob(DISTANT_BENCH_OUTPUT + '/output/*/')
+
+def get_latest_bench_output(coverage, n):
+    bench_outputs = glob(coverage + '/*/')
+    bench_outputs.sort(reverse=True)
+    return bench_outputs[:n]
+
+def plot_latest(args):
+    n = int(args.get('N'))
+    coverages = get_benched_coverage_from_output()
+    if not os.path.exists(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering')):
+       os.makedirs(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering'))  
+
+    for cov in coverages:
+        latest_bench_outputs = get_latest_bench_output(cov, n)
+        box = pygal.Box(box_mode="tukey")
+        box.title = cov.split('/')[2]
+        for output in latest_bench_outputs[::-1]:
+            time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
+            time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
+            box.add(output.split('/')[3], numpy.array(time_array1) / numpy.array(time_array2))
+        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[2])))
+        
 def parse_args():
     from docopt import docopt
     return docopt(__doc__, version='Jormungandr Bench V0.0.1')
@@ -157,6 +187,8 @@ def main():
         bench(args)
     if args.get('replot'):
         replot(args)
-        
+    if args.get('plot-latest'):
+        plot_latest(args)
+
 if __name__ == '__main__':
     main()
