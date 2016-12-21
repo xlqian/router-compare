@@ -1,0 +1,7 @@
+__pycache__/
+auth_params/
+*~
+test_results/
+*.pyc
+*.zip
+Navitia-Multimodal-Bench-Output/
