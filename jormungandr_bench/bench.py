@@ -169,12 +169,13 @@ def plot_latest(args):
     for cov in coverages:
         latest_bench_outputs = get_latest_bench_output(cov, n)
         box = pygal.Box(box_mode="tukey")
-        box.title = cov.split('/')[-2]
+        coverage_name = cov.split('/')[-2]
+        box.title = coverage_name
         for output in latest_bench_outputs[::-1]:
             time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
             time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
             box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
-        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[-2])))
+        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(coverage_name)))
         
 def parse_args():
     from docopt import docopt
