@@ -174,7 +174,7 @@ def plot_latest(args):
             time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
             time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
             box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
-        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[-3])))
+        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[-2])))
         
 def parse_args():
     from docopt import docopt
