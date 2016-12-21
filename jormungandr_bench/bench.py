@@ -15,10 +15,10 @@ Options:
   -a <ARGS>, --extra-args=<ARGS>        Extra args for the request
 
 Example:
-  ./bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
-  ./bench replot new_default.csv experimental.csv
-  ./bench replot 
-  ./bench.py plot-latest 30
+  bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
+  bench.py replot new_default.csv experimental.csv
+  bench.py replot 
+  bench.py plot-latest 30
    
 """
 from __future__ import print_function
@@ -154,10 +154,10 @@ def replot(args):
     plot_normalized_box(time_arry1, time_arry2,file1, file2)    
 
 def get_benched_coverage_from_output():
-    return glob(DISTANT_BENCH_OUTPUT + '/output/*' + os.path.sep)
+    return glob(DISTANT_BENCH_OUTPUT + '/output/*/')
 
 def get_latest_bench_output(coverage, n):
-    bench_outputs = glob(coverage + '/*' + os.path.sep)
+    bench_outputs = glob(coverage + '/*/')
     bench_outputs.sort(reverse=True)
     return bench_outputs[:n]
 
