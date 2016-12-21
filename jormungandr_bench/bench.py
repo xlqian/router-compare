@@ -17,7 +17,6 @@ Options:
 Example:
   bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
   bench.py replot new_default.csv experimental.csv
-  bench.py replot 
   bench.py plot-latest 30
    
 """
