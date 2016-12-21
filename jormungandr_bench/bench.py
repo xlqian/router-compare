@@ -140,7 +140,7 @@ def get_times(csv_path):
         logger.info('Finish parsing: {}'.format(csv_path))       
     except Exception as e:
         import sys
-        logger.err('Error occurred when parsing csv: ' + str(e))
+        logger.error('Error occurred when parsing csv: ' + str(e))
     return times
     
 def replot(args):
@@ -169,12 +169,12 @@ def plot_latest(args):
     for cov in coverages:
         latest_bench_outputs = get_latest_bench_output(cov, n)
         box = pygal.Box(box_mode="tukey")
-        box.title = cov.split('/')[2]
+        box.title = cov.split('/')[-2]
         for output in latest_bench_outputs[::-1]:
             time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
             time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
-            box.add(output.split('/')[3], numpy.array(time_array1) / numpy.array(time_array2))
-        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[2])))
+            box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
+        box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(cov.split('/')[-3])))
         
 def parse_args():
     from docopt import docopt
