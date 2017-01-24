@@ -174,7 +174,8 @@ def plot_latest(args):
         for output in latest_bench_outputs[::-1]:
             time_array1 = get_times(os.path.join(output, "{}.csv".format('experimental')))
             time_array2 = get_times(os.path.join(output, "{}.csv".format('new_default')))
-            box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
+            if len(time_array1) == len(time_array2):
+                box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
         box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(coverage_name)))
         
 def parse_args():
