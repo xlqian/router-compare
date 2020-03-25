@@ -29,44 +29,16 @@ import tqdm
 import logging
 import pygal
 import os
+import csv
 from config import logger
 import config
 from glob import glob
 
-NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
-NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
-
-COVERAGE = os.getenv('COVERAGE')
-COVERAGE = COVERAGE if COVERAGE else config.COVERAGE 
-
-TOKEN = os.getenv('TOKEN')
-TOKEN = TOKEN if TOKEN else config.TOKEN     
-
-DISTANT_BENCH_OUTPUT = os.getenv('DISTANT_BENCH_OUTPUT')
-DISTANT_BENCH_OUTPUT = DISTANT_BENCH_OUTPUT if DISTANT_BENCH_OUTPUT else config.DISTANT_BENCH_OUTPUT    
-
-OUTPUT_DIR = os.getenv('OUTPUT_DIR')
-OUTPUT_DIR = OUTPUT_DIR if OUTPUT_DIR else config.OUTPUT_DIR    
-
-def parse_request_csv(csv_path):
-    logger.info('Start parsing csv: {}'.format(csv_path))
-    import csv
-    import string
-    requests = []
-    try:
-        with open(csv_path) as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                if row[' arrival'] != '-1':
-                    requests.append((row['Start'].strip(' '), 
-                                row[' Target'].strip(' '), 
-                                row[' Day'], 
-                                row[' Hour']))
-        logger.info('Finish parsing: {} requests'.format(len(requests)))       
-    except Exception as e:
-        import sys
-        logger.error('Error occurred when parsing csv: ' + str(e))
-    return requests
+NAVITIA_API_URL = os.getenv('NAVITIA_API_URL', config.NAVITIA_API_URL)
+COVERAGE = os.getenv('COVERAGE', config.COVERAGE)
+TOKEN = os.getenv('TOKEN', config.TOKEN)
+DISTANT_BENCH_OUTPUT = os.getenv('DISTANT_BENCH_OUTPUT', config.DISTANT_BENCH_OUTPUT)
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', config.OUTPUT_DIR)
 
 def get_coverage_start_production_date():
     r = requests.get("{}/coverage/{}".format(NAVITIA_API_URL, COVERAGE), headers={'Authorization': TOKEN})
@@ -82,29 +54,23 @@ def _call_jormun(url, times=1):
     for _ in range(times): 
         r = requests.get(url, headers={'Authorization': TOKEN})
     time2 = time.time()
-    collapsed_time = (time2-time1)*1000.0/times  
-    return r, collapsed_time
+    elapsed_time = (time2-time1)*1000.0/times  
+    return r, elapsed_time
 
-def call_jormun(reqs, scenario, extra_args):
-    start_prod_date = get_coverage_start_production_date()
-    logger.info("calling scenario: " + scenario)
-    collapsed_time = []
+def call_jormun(num, path, parameters, extra_args, scenarios_outputs):
+    
+    elapsed_time = {}
+    for scenario, output in scenarios_outputs.items():
+        req_url = "{}{}?{}&_override_scenario={}&{}".format(NAVITIA_API_URL, path, parameters, scenario, extra_args)
+        ret, t = _call_jormun(req_url)
+        if ret.status_code != 200:
+            logger.error("calling error: {} {}".format(num, req_url))
+            continue
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+        print("{},{},{}".format(num, req_url, t), file=output)
+        elapsed_time[scenario] = t
 
-    with open(os.path.join(OUTPUT_DIR, "{}.csv".format(scenario)), 'w') as f:
-        print("No,url,collapsed time", file=f)
-        for i, r in tqdm.tqdm(list(enumerate(reqs))):
-            req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
-            req_url = "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
-                NAVITIA_API_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)
-            ret, t = _call_jormun(req_url, 1)
-            if ret.status_code != 200:
-                logger.error("calling error: {} {}".format(i, req_url))
-            print("{},{},{}".format(i, req_url, t), file=f)
-            collapsed_time.append(t)
-    return collapsed_time    
+    return elapsed_time
 
 def plot_per_request(array1, array2, label1='', label2=''):
     line_chart = pygal.Line(show_x_labels=False)
@@ -121,13 +87,34 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.add('Time Ratio: {}/{}'.format(label2, label1), np.array(array2) / np.array(array1))
     box.render_to_file('output_box.svg')
 
+def init_outputs(scenarios, output_dir):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    scenarios_outputs = { s: open(os.path.join(output_dir, "{}.csv".format(s)), 'w') for s in scenarios }
+    for _, out in scenarios_outputs.items():
+        print("No,url,elapsed time", file=out)
+
+    return scenarios_outputs
+
 def bench(args):
-    reqs = parse_request_csv(args['--input'])
     extra_args = args['--extra-args'] or ''
-    collapsed_time_new_default = call_jormun(reqs, 'new_default', extra_args)
-    collapsed_time_experimental = call_jormun(reqs, 'experimental', extra_args)
-    plot_per_request(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
-    plot_normalized_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+
+    input_file_name = args['--input']
+    input_file_size = sum(1 for line in open(input_file_name)) - 1 # size minus header file
+    input_file = open(input_file_name)
+
+    scenarios = ['new_default', 'experimental']
+    scenarios_outputs = init_outputs(scenarios, OUTPUT_DIR)
+    scenarios_times = {s:[] for s in scenarios}
+
+    for i, req in tqdm.tqdm(enumerate(line for line in csv.DictReader(input_file)), total=input_file_size):
+        times = call_jormun(i, req['path'], req['parameters'], extra_args, scenarios_outputs)
+        for scenario, elapsed_time in times.items():
+            scenarios_times[scenario].append(elapsed_time)
+
+    plot_per_request(scenarios_times['new_default'], scenarios_times['experimental'], 'new_default', 'experimental')
+    plot_normalized_box(scenarios_times['new_default'], scenarios_times['experimental'], 'new_default', 'experimental')
     
 def get_times(csv_path):
     times = []
@@ -136,7 +123,7 @@ def get_times(csv_path):
         with open(csv_path, 'rb') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                times.append(float(row['collapsed time']))
+                times.append(float(row['elapsed time']))
         logger.info('Finish parsing: {}'.format(csv_path))       
     except Exception as e:
         import sys
