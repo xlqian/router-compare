@@ -4,7 +4,7 @@
 Usage:
   bench.py (-h | --help)
   bench.py --version
-  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS]
+  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [--workers]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
    
@@ -33,6 +33,7 @@ import csv
 from config import logger
 import config
 from glob import glob
+import concurrent.futures
 
 NAVITIA_API_URL = os.getenv('NAVITIA_API_URL', config.NAVITIA_API_URL)
 COVERAGE = os.getenv('COVERAGE', config.COVERAGE)
@@ -48,29 +49,15 @@ def get_coverage_start_production_date():
 def get_request_datetime(start_prod_date, days_shift, seconds):
     return start_prod_date + datetime.timedelta(days=days_shift, seconds=seconds)
 
-def _call_jormun(url, times=1):
+def _call_jormun(url):
     import time
     time1 = time.time()
-    for _ in range(times): 
-        r = requests.get(url, headers={'Authorization': TOKEN})
+    r = requests.get(url, headers={'Authorization': TOKEN})
     time2 = time.time()
-    elapsed_time = (time2-time1)*1000.0/times  
+    elapsed_time = (time2-time1)*1000.0
     return r, elapsed_time
 
-def call_jormun(num, path, parameters, extra_args, scenarios_outputs):
     
-    elapsed_time = {}
-    for scenario, output in scenarios_outputs.items():
-        req_url = "{}{}?{}&_override_scenario={}&{}".format(NAVITIA_API_URL, path, parameters, scenario, extra_args)
-        ret, t = _call_jormun(req_url)
-        if ret.status_code != 200:
-            logger.error("calling error: {} {}".format(num, req_url))
-            continue
-
-        print("{},{},{}".format(num, req_url, t), file=output)
-        elapsed_time[scenario] = t
-
-    return elapsed_time
 
 def plot_per_request(array1, array2, label1='', label2=''):
     line_chart = pygal.Line(show_x_labels=False)
@@ -87,34 +74,45 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.add('Time Ratio: {}/{}'.format(label2, label1), np.array(array2) / np.array(array1))
     box.render_to_file('output_box.svg')
 
-def init_outputs(scenarios, output_dir):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
-    scenarios_outputs = { s: open(os.path.join(output_dir, "{}.csv".format(s)), 'w') for s in scenarios }
-    for _, out in scenarios_outputs.items():
-        print("No,url,elapsed time", file=out)
+def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios):
+    for scenarios_name, scenario in scenarios.items():
+        req_url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
+        ret, t = _call_jormun(req_url)
+        if ret.status_code != 200:
+            logger.error("calling error: {} {}".format(i, req_url))
+            continue
 
-    return scenarios_outputs
+        print("{},{},{}".format(i, req_url, t), file=scenario.output)
+        scenario.times.append(t)
+
+class Scenario(object):
+    def __init__(self, name, output_dir):
+        self.name = name
+        self.times = []
+        
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        self.output = open(os.path.join(output_dir, "{}.csv".format(name)), 'w')
+        print("No,url,elapsed time", file=self.output)
+
 
 def bench(args):
     extra_args = args['--extra-args'] or ''
+    nb_workers = args['--workers'] or 1
 
     input_file_name = args['--input']
     input_file_size = sum(1 for line in open(input_file_name)) - 1 # size minus header file
     input_file = open(input_file_name)
 
-    scenarios = ['new_default', 'experimental']
-    scenarios_outputs = init_outputs(scenarios, OUTPUT_DIR)
-    scenarios_times = {s:[] for s in scenarios}
+    scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
 
     for i, req in tqdm.tqdm(enumerate(line for line in csv.DictReader(input_file)), total=input_file_size):
-        times = call_jormun(i, req['path'], req['parameters'], extra_args, scenarios_outputs)
-        for scenario, elapsed_time in times.items():
-            scenarios_times[scenario].append(elapsed_time)
+        call_jormun_scenarios(i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenarios)
 
-    plot_per_request(scenarios_times['new_default'], scenarios_times['experimental'], 'new_default', 'experimental')
-    plot_normalized_box(scenarios_times['new_default'], scenarios_times['experimental'], 'new_default', 'experimental')
+    plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
+    plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
     
 def get_times(csv_path):
     times = []
