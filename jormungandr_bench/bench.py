@@ -76,16 +76,10 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.render_to_file('output_box.svg')
 
 
-def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios):
-    for scenarios_name, scenario in scenarios.items():
-        req_url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
-        ret, t = _call_jormun(req_url)
-        if ret.status_code != 200:
-            logger.error("calling error: {} {}".format(i, req_url))
-            continue
-
-        print("{},{},{}".format(i, req_url, t), file=scenario.output)
-        scenario.times.append(t)
+def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios_name):
+    req_url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
+    ret, t = _call_jormun(req_url)
+    return i, scenarios_name, ret.status_code, t, req_url 
 
 class Scenario(object):
     def __init__(self, name, output_dir):
@@ -96,9 +90,14 @@ class Scenario(object):
             os.makedirs(output_dir)
 
         self.output = open(os.path.join(output_dir, "{}.csv".format(name)), 'w')
-        print("No,url,elapsed time", file=self.output)
+        print("No,url,elapsed time,status_code", file=self.output)
 
-
+def submit_work(pool, input_file, scenarios, extra_args):
+    for i, req in enumerate(line for line in csv.DictReader(input_file)):
+        for scenario_name in scenarios:
+            params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenario_name]
+            yield pool.submit(call_jormun_scenarios, *params)
+    
 def bench(args):
     extra_args = args['--extra-args'] or ''
     nb_workers = int(args['--workers'] or 1)
@@ -110,14 +109,17 @@ def bench(args):
     scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
 
     with concurrent.futures.ThreadPoolExecutor(nb_workers) as pool:    
-        futures = []
-        for i, req in enumerate(line for line in csv.DictReader(input_file)):
-            params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenarios]
-            futures.append(pool.submit(call_jormun_scenarios, *params))
+        futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
 
-        for i in tqdm.tqdm(concurrent.futures.as_completed(futures), total=input_file_size):
-            #print(i.result())
-            pass
+        for i in tqdm.tqdm(concurrent.futures.as_completed(futures), total=input_file_size*2):
+            idx, scenario_name, status_code, time, url = i.result()
+            
+            if status_code >= 300:
+                continue
+
+            print("{},{},{},{}".format(idx, url, time, status_code), file=scenarios[scenario_name].output)
+            scenarios[scenario_name].times.append(time)
+
 
     plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
     plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
