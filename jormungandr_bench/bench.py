@@ -4,7 +4,7 @@
 Usage:
   bench.py (-h | --help)
   bench.py --version
-  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [--workers]
+  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [-w NB_WORKER | --workers=NB_WORKER]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
    
@@ -13,6 +13,7 @@ Options:
   --version                             Show version.
   -i <FILE>, --input=<FILE>             input csv
   -a <ARGS>, --extra-args=<ARGS>        Extra args for the request
+  -w <NB_WORKER>, --workers=<NB_WORKER> Number of thread to perform requests [default: 1]
 
 Example:
   bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
@@ -100,7 +101,7 @@ class Scenario(object):
 
 def bench(args):
     extra_args = args['--extra-args'] or ''
-    nb_workers = args['--workers'] or 1
+    nb_workers = int(args['--workers'] or 1)
 
     input_file_name = args['--input']
     input_file_size = sum(1 for line in open(input_file_name)) - 1 # size minus header file
@@ -108,8 +109,15 @@ def bench(args):
 
     scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
 
-    for i, req in tqdm.tqdm(enumerate(line for line in csv.DictReader(input_file)), total=input_file_size):
-        call_jormun_scenarios(i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenarios)
+    with concurrent.futures.ThreadPoolExecutor(nb_workers) as pool:    
+        futures = []
+        for i, req in enumerate(line for line in csv.DictReader(input_file)):
+            params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenarios]
+            futures.append(pool.submit(call_jormun_scenarios, *params))
+
+        for i in tqdm.tqdm(concurrent.futures.as_completed(futures), total=input_file_size):
+            #print(i.result())
+            pass
 
     plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
     plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
