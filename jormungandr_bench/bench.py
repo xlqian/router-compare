@@ -92,23 +92,30 @@ class Scenario(object):
         self.output = open(os.path.join(output_dir, "{}.csv".format(name)), 'w')
         print("No,url,elapsed time,status_code", file=self.output)
 
+    def __del__(self):
+        self.output.close()
+
 def submit_work(pool, input_file, scenarios, extra_args):
     for i, req in enumerate(line for line in csv.DictReader(input_file)):
         for scenario_name in scenarios:
             params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenario_name]
             yield pool.submit(call_jormun_scenarios, *params)
+
+def get_file_lines_num(input_file_name):
+    with open(input_file_name) as input_file:
+        return sum(1 for line in input_file) - 1 # size minus header file
+
     
 def bench(args):
     extra_args = args['--extra-args'] or ''
     concurrent = int(args['--concurrent'] or 1)
 
     input_file_name = args['--input']
-    input_file_size = sum(1 for line in open(input_file_name)) - 1 # size minus header file
-    input_file = open(input_file_name)
+    input_file_size = get_file_lines_num(input_file_name)
 
     scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
-
-    with ThreadPoolExecutor(concurrent) as pool:    
+    
+    with open(input_file_name) as input_file, ThreadPoolExecutor(concurrent) as pool:   
         futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
 
         for i in tqdm.tqdm(as_completed(futures), total=input_file_size*2):
