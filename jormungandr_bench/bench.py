@@ -4,16 +4,16 @@
 Usage:
   bench.py (-h | --help)
   bench.py --version
-  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [-w NB_WORKER | --workers=NB_WORKER]
+  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
    
 Options:
-  -h --help                             Show this screen.
-  --version                             Show version.
-  -i <FILE>, --input=<FILE>             input csv
-  -a <ARGS>, --extra-args=<ARGS>        Extra args for the request
-  -w <NB_WORKER>, --workers=<NB_WORKER> Number of thread to perform requests [default: 1]
+  -h --help                                 Show this screen.
+  --version                                 Show version.
+  -i <FILE>, --input=<FILE>                 Input csv
+  -a <ARGS>, --extra-args=<ARGS>            Extra args for the request
+  -c <CONCURRENT>, --concurrent=CONCURRENT  Concurrent request number
 
 Example:
   bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
@@ -34,7 +34,7 @@ import csv
 from config import logger
 import config
 from glob import glob
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 NAVITIA_API_URL = os.getenv('NAVITIA_API_URL', config.NAVITIA_API_URL)
 COVERAGE = os.getenv('COVERAGE', config.COVERAGE)
@@ -47,6 +47,7 @@ def get_coverage_start_production_date():
     j = r.json()
     return datetime.datetime.strptime(j['regions'][0]['start_production_date'], '%Y%m%d')
 
+
 def get_request_datetime(start_prod_date, days_shift, seconds):
     return start_prod_date + datetime.timedelta(days=days_shift, seconds=seconds)
 
@@ -58,8 +59,6 @@ def _call_jormun(url):
     elapsed_time = (time2-time1)*1000.0
     return r, elapsed_time
 
-    
-
 def plot_per_request(array1, array2, label1='', label2=''):
     line_chart = pygal.Line(show_x_labels=False)
     line_chart.title = 'Jormun Bench (in ms)'
@@ -67,6 +66,7 @@ def plot_per_request(array1, array2, label1='', label2=''):
     line_chart.add(label1, array1)
     line_chart.add(label2, array2)
     line_chart.render_to_file('output_per_request.svg')
+
 
 def plot_normalized_box(array1, array2, label1='', label2=''):
     import numpy as np
@@ -100,7 +100,7 @@ def submit_work(pool, input_file, scenarios, extra_args):
     
 def bench(args):
     extra_args = args['--extra-args'] or ''
-    nb_workers = int(args['--workers'] or 1)
+    concurrent = int(args['--concurrent'] or 1)
 
     input_file_name = args['--input']
     input_file_size = sum(1 for line in open(input_file_name)) - 1 # size minus header file
@@ -108,13 +108,14 @@ def bench(args):
 
     scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
 
-    with concurrent.futures.ThreadPoolExecutor(nb_workers) as pool:    
+    with ThreadPoolExecutor(concurrent) as pool:    
         futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
 
-        for i in tqdm.tqdm(concurrent.futures.as_completed(futures), total=input_file_size*2):
+        for i in tqdm.tqdm(as_completed(futures), total=input_file_size*2):
             idx, scenario_name, status_code, time, url = i.result()
             
             if status_code >= 300:
+                print('error ', status_code, ' occurred on the url: ', url)
                 continue
 
             print("{},{},{},{}".format(idx, url, time, status_code), file=scenarios[scenario_name].output)
@@ -137,7 +138,8 @@ def get_times(csv_path):
         import sys
         logger.error('Error occurred when parsing csv: ' + str(e))
     return times
-    
+
+
 def replot(args):
     files = args.get('<file>') or ['new_default.csv', 'experimental.csv']
     file1 = files[0]
@@ -147,13 +149,16 @@ def replot(args):
     plot_per_request(time_arry1, time_arry2,file1, file2)    
     plot_normalized_box(time_arry1, time_arry2,file1, file2)    
 
+
 def get_benched_coverage_from_output():
     return glob(DISTANT_BENCH_OUTPUT + '/output/*/')
+
 
 def get_latest_bench_output(coverage, n):
     bench_outputs = glob(coverage + '/*/')
     bench_outputs.sort(reverse=True)
     return bench_outputs[:n]
+
 
 def plot_latest(args):
     n = int(args.get('N'))
@@ -172,10 +177,12 @@ def plot_latest(args):
             if len(time_array1) == len(time_array2):
                 box.add(output.split('/')[-2], numpy.array(time_array1) / numpy.array(time_array2))
         box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(coverage_name)))
-        
+
+
 def parse_args():
     from docopt import docopt
     return docopt(__doc__, version='Jormungandr Bench V0.0.1')
+
 
 def main():
     args = parse_args()
@@ -186,6 +193,7 @@ def main():
         replot(args)
     if args.get('plot-latest'):
         plot_latest(args)
+
 
 if __name__ == '__main__':
     main()
