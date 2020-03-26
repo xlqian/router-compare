@@ -30,89 +30,17 @@ import tqdm
 import logging
 import pygal
 import os
+import csv
 from config import logger
 import config
 from glob import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
-NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
-
-COVERAGE = os.getenv('COVERAGE')
-COVERAGE = COVERAGE if COVERAGE else config.COVERAGE 
-
-TOKEN = os.getenv('TOKEN')
-TOKEN = TOKEN if TOKEN else config.TOKEN     
-
-DISTANT_BENCH_OUTPUT = os.getenv('DISTANT_BENCH_OUTPUT')
-DISTANT_BENCH_OUTPUT = DISTANT_BENCH_OUTPUT if DISTANT_BENCH_OUTPUT else config.DISTANT_BENCH_OUTPUT    
-
-OUTPUT_DIR = os.getenv('OUTPUT_DIR')
-OUTPUT_DIR = OUTPUT_DIR if OUTPUT_DIR else config.OUTPUT_DIR
-
-
-def parallel_process(array, function, n_workers=4, use_kwargs=False):
-    """
-        A parallel version of the map function with a progress bar.
-
-        Args:
-            array (array-like): An array to iterate over.
-            function (function): A python function to apply to the elements of array
-            n_jobs (int, default=16): The number of cores to use
-            use_kwargs (boolean, default=False): Whether to consider the elements of array as dictionaries of
-                keyword arguments to function
-        Returns:
-            [function(array[0]), function(array[1]), ...]
-    """
-    # If we set n_jobs to 1, just run a list comprehension. This is useful for benchmarking and debugging.
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-    if n_workers == 1:
-        return [function(**a) if use_kwargs else function(a) for a in tqdm.tqdm(array)]
-
-    # Assemble the workers
-    with ProcessPoolExecutor(max_workers=n_workers) as pool:
-        # Pass the elements of array into function
-        if use_kwargs:
-            futures = [pool.submit(function, **a) for a in array]
-        else:
-            futures = [pool.submit(function, a) for a in array]
-        kwargs = {
-            'total': len(futures),
-            'unit': 'it',
-            'unit_scale': True,
-            'leave': True
-        }
-        # Print out the progress as tasks complete
-        for _ in tqdm.tqdm(as_completed(futures), **kwargs):
-            pass
-    out = []
-    # Get the results from the futures.
-    for i, future in enumerate(futures):
-        try:
-            out.append(future.result())
-        except Exception as e:
-            out.append(e)
-    return out
-
-
-def parse_request_csv(csv_path):
-    logger.info('Start parsing csv: {}'.format(csv_path))
-    import csv
-    requests = []
-    try:
-        with open(csv_path) as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                if row[' arrival'] != '-1':
-                    requests.append((row['Start'].strip(' '), 
-                                row[' Target'].strip(' '), 
-                                row[' Day'], 
-                                row[' Hour']))
-        logger.info('Finish parsing: {} requests'.format(len(requests)))       
-    except Exception as e:
-        import sys
-        logger.error('Error occurred when parsing csv: ' + str(e))
-    return requests
-
+NAVITIA_API_URL = os.getenv('NAVITIA_API_URL', config.NAVITIA_API_URL)
+COVERAGE = os.getenv('COVERAGE', config.COVERAGE)
+TOKEN = os.getenv('TOKEN', config.TOKEN)
+DISTANT_BENCH_OUTPUT = os.getenv('DISTANT_BENCH_OUTPUT', config.DISTANT_BENCH_OUTPUT)
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', config.OUTPUT_DIR)
 
 def get_coverage_start_production_date():
     r = requests.get("{}/coverage/{}".format(NAVITIA_API_URL, COVERAGE), headers={'Authorization': TOKEN})
@@ -123,44 +51,13 @@ def get_coverage_start_production_date():
 def get_request_datetime(start_prod_date, days_shift, seconds):
     return start_prod_date + datetime.timedelta(days=days_shift, seconds=seconds)
 
-
-def _call_jormun(i, url):
+def _call_jormun(url):
     import time
     time1 = time.time()
     r = requests.get(url, headers={'Authorization': TOKEN})
     time2 = time.time()
-    if r.status_code != 200:
-        print('error occurred on the url: ', url)
-        return i, url, 0
-    collapsed_time = (time2-time1)*1000.0
-    return i, url, collapsed_time
-
-
-def call_jormun(reqs, scenario, concurrent, extra_args):
-    start_prod_date = get_coverage_start_production_date()
-    logger.info("calling scenario: " + scenario)
-    collapsed_time = []
-
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    args = []
-    for i, r in enumerate(reqs):
-        req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
-        args.append({"i": i,
-                     "url": "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
-            NAVITIA_API_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)})
-
-    out = parallel_process(args, _call_jormun, n_workers=concurrent, use_kwargs=True)
-    out.sort(key=lambda x: x[0])
-
-    with open(os.path.join(OUTPUT_DIR, "{}.csv".format(scenario)), 'w') as f:
-        print("No,url,collapsed time", file=f)
-        for i, req_url, t in out:
-            print("{},{},{}".format(i, req_url, t), file=f)
-            collapsed_time.append(t)
-    return collapsed_time    
-
+    elapsed_time = (time2-time1)*1000.0
+    return r, elapsed_time
 
 def plot_per_request(array1, array2, label1='', label2=''):
     line_chart = pygal.Line(show_x_labels=False)
@@ -179,16 +76,62 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.render_to_file('output_box.svg')
 
 
+def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios_name):
+    req_url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
+    ret, t = _call_jormun(req_url)
+    return i, scenarios_name, ret.status_code, t, req_url 
+
+class Scenario(object):
+    def __init__(self, name, output_dir):
+        self.name = name
+        self.times = []
+        
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        self.output = open(os.path.join(output_dir, "{}.csv".format(name)), 'w')
+        print("No,url,elapsed time,status_code", file=self.output)
+
+    def __del__(self):
+        self.output.close()
+
+def submit_work(pool, input_file, scenarios, extra_args):
+    for i, req in enumerate(line for line in csv.DictReader(input_file)):
+        for scenario_name in scenarios:
+            params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenario_name]
+            yield pool.submit(call_jormun_scenarios, *params)
+
+def get_file_lines_num(input_file_name):
+    with open(input_file_name) as input_file:
+        return sum(1 for line in input_file) - 1 # size minus header file
+
+    
 def bench(args):
-    reqs = parse_request_csv(args['--input'])
     extra_args = args['--extra-args'] or ''
     concurrent = int(args['--concurrent'] or 1)
-    collapsed_time_new_default = call_jormun(reqs, 'new_default', concurrent, extra_args)
-    collapsed_time_experimental = call_jormun(reqs, 'experimental', concurrent, extra_args)
-    plot_per_request(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
-    plot_normalized_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+
+    input_file_name = args['--input']
+    input_file_size = get_file_lines_num(input_file_name)
+
+    scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
+    
+    with open(input_file_name) as input_file, ThreadPoolExecutor(concurrent) as pool:   
+        futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
+
+        for i in tqdm.tqdm(as_completed(futures), total=input_file_size*2):
+            idx, scenario_name, status_code, time, url = i.result()
+            
+            if status_code >= 300:
+                print('error ', status_code, ' occurred on the url: ', url)
+                continue
+
+            print("{},{},{},{}".format(idx, url, time, status_code), file=scenarios[scenario_name].output)
+            scenarios[scenario_name].times.append(time)
 
 
+    plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
+    plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
+    
 def get_times(csv_path):
     times = []
     try:
@@ -196,7 +139,7 @@ def get_times(csv_path):
         with open(csv_path, 'rb') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                times.append(float(row['collapsed time']))
+                times.append(float(row['elapsed time']))
         logger.info('Finish parsing: {}'.format(csv_path))       
     except Exception as e:
         import sys

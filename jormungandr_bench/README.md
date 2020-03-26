@@ -19,7 +19,7 @@ pip3 install -r requirements.txt
 Then do :
 
 ```bash
-./bench.py bench --input=benchmark_example.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
+NAVITIA_API_URL=http://api.navitia.io TOKEN="3b036afe-0110-4202-b9ed-99718476c2e0" python3 bench.py bench -i ./benchmark_example.csv -c 6
 ```
 
 This command will generate two files containing url and collapsed time.
