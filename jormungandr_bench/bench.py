@@ -4,14 +4,14 @@
 Usage:
   bench.py (-h | --help)
   bench.py --version
-  bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
+  bench.py bench [-i FILE | --input=FILE] [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
    
 Options:
   -h --help                                 Show this screen.
   --version                                 Show version.
-  -i <FILE>, --input=<FILE>                 Input csv
+  -i <FILE>, --input=<FILE>                 Input csv (or stdin if missing)
   -a <ARGS>, --extra-args=<ARGS>            Extra args for the request
   -c <CONCURRENT>, --concurrent=CONCURRENT  Concurrent request number
 
@@ -33,6 +33,7 @@ import os
 import csv
 from config import logger
 import config
+import sys
 from glob import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -101,24 +102,31 @@ def submit_work(pool, input_file, scenarios, extra_args):
             params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenario_name]
             yield pool.submit(call_jormun_scenarios, *params)
 
-def get_file_lines_num(input_file_name):
-    with open(input_file_name) as input_file:
-        return sum(1 for line in input_file) - 1 # size minus header file
+def get_file_lines_num(input_file):
+    position = input_file.tell()
+    num_lines = sum(1 for line in input_file) - 1 # size minus header file
 
+    input_file.seek(position)
+    return num_lines
     
 def bench(args):
     extra_args = args['--extra-args'] or ''
     concurrent = int(args['--concurrent'] or 1)
 
-    input_file_name = args['--input']
-    input_file_size = get_file_lines_num(input_file_name)
+    input_file_name = args['--input'] or None
+    input_file = sys.stdin
+    args = {}
 
     scenarios = { s : Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental'] }
-    
-    with open(input_file_name) as input_file, ThreadPoolExecutor(concurrent) as pool:   
+
+    if input_file_name:
+        input_file = open(input_file_name)
+        args['total'] = get_file_lines_num(input_file) * len(scenarios)
+
+    with ThreadPoolExecutor(concurrent) as pool:   
         futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
 
-        for i in tqdm.tqdm(as_completed(futures), total=input_file_size*2):
+        for i in tqdm.tqdm(as_completed(futures), **args):
             idx, scenario_name, status_code, time, url = i.result()
             
             if status_code >= 300:
@@ -128,6 +136,8 @@ def bench(args):
             print("{},{},{},{}".format(idx, url, time, status_code), file=scenarios[scenario_name].output)
             scenarios[scenario_name].times.append(time)
 
+
+    input_file.close()
 
     plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
     plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
