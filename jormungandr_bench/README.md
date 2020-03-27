@@ -22,6 +22,10 @@ Then do :
 NAVITIA_API_URL=http://api.navitia.io TOKEN="3b036afe-0110-4202-b9ed-99718476c2e0" python3 bench.py bench -i ./benchmark_example.csv -c 6
 ```
 
+Or you can send requests from standard input like :
+```
+cat ./benchmark_example.csv | NAVITIA_API_URL=http://api.navitia.io TOKEN="3b036afe-0110-4202-b9ed-99718476c2e0" python3 bench.py bench -c 6
+```
 This command will generate two files containing url and collapsed time.
 
 You can use `replot` command to redraw the result:
