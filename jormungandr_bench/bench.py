@@ -34,6 +34,7 @@ import csv
 from config import logger
 import config
 import sys
+import sortedcontainers
 from glob import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -87,7 +88,7 @@ def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios):
 class Scenario(object):
     def __init__(self, name, output_dir):
         self.name = name
-        self.times = []
+        self.times = sortedcontainers.SortedDict()
         
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -133,15 +134,19 @@ def bench(args):
             if any(status_code >=300 for _, _, _, status_code in requests ):
                 continue
 
+            #import pdb;pdb.set_trace()
             for scenario_name, url, time, code in requests:
                 print("{},{},{},{}".format(idx, url, time, code), file=scenarios[scenario_name].output)
-                scenarios[scenario_name].times.append(time)
+                scenarios[scenario_name].times[idx] = time
 
 
     input_file.close()
-
-    plot_per_request(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
-    plot_normalized_box(scenarios['new_default'].times, scenarios['experimental'].times, 'new_default', 'experimental')
+    
+    new_default_times = scenarios['new_default'].times.values();
+    experimental_times = scenarios['experimental'].times.values();
+    
+    plot_per_request(new_default_times, experimental_times, 'new_default', 'experimental')
+    plot_normalized_box(new_default_times, experimental_times, 'new_default', 'experimental')
     
 def get_times(csv_path):
     times = []
