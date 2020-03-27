@@ -76,11 +76,13 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.add('Time Ratio: {}/{}'.format(label2, label1), np.array(array2) / np.array(array1))
     box.render_to_file('output_box.svg')
 
+def call_jormun(server, path, parameters, scenarios_name, extra_args):
+    url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
+    ret, t = _call_jormun(url)
+    return scenarios_name, url, t, ret.status_code
 
-def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios_name):
-    req_url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenarios_name, extra_args)
-    ret, t = _call_jormun(req_url)
-    return i, scenarios_name, ret.status_code, t, req_url 
+def call_jormun_scenarios(i, server, path, parameters, extra_args, scenarios):
+    return i, [call_jormun(server, path, parameters, scenarios_name, extra_args) for scenarios_name in scenarios]
 
 class Scenario(object):
     def __init__(self, name, output_dir):
@@ -98,9 +100,8 @@ class Scenario(object):
 
 def submit_work(pool, input_file, scenarios, extra_args):
     for i, req in enumerate(line for line in csv.DictReader(input_file)):
-        for scenario_name in scenarios:
-            params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenario_name]
-            yield pool.submit(call_jormun_scenarios, *params)
+        params = [i, NAVITIA_API_URL, req['path'], req['parameters'], extra_args, scenarios]
+        yield pool.submit(call_jormun_scenarios, *params)
 
 def get_file_lines_num(input_file):
     position = input_file.tell()
@@ -121,20 +122,20 @@ def bench(args):
 
     if input_file_name:
         input_file = open(input_file_name)
-        args['total'] = get_file_lines_num(input_file) * len(scenarios)
+        args['total'] = get_file_lines_num(input_file)
 
     with ThreadPoolExecutor(concurrent) as pool:   
         futures = (f for f in submit_work(pool, input_file, scenarios, extra_args))
 
         for i in tqdm.tqdm(as_completed(futures), **args):
-            idx, scenario_name, status_code, time, url = i.result()
-            
-            if status_code >= 300:
-                print('error ', status_code, ' occurred on the url: ', url)
+            idx, requests = i.result()
+           
+            if any(status_code >=300 for _, _, _, status_code in requests ):
                 continue
 
-            print("{},{},{},{}".format(idx, url, time, status_code), file=scenarios[scenario_name].output)
-            scenarios[scenario_name].times.append(time)
+            for scenario_name, url, time, code in requests:
+                print("{},{},{},{}".format(idx, url, time, code), file=scenarios[scenario_name].output)
+                scenarios[scenario_name].times.append(time)
 
 
     input_file.close()
