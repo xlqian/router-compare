@@ -3,4 +3,4 @@ requests>=2.0.0
 tqdm
 docopt
 numpy
-
+sortedcontainers==2.1.0
