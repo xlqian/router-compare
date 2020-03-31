@@ -5,36 +5,40 @@ Usage:
   bench.py (-h | --help)
   bench.py --version
   bench.py bench (-i FILE | --input=FILE) [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
+  bench.py sampling_bench <min_lon> <max_lon> <min_lat> <max_lat> [-n=SAMPLING_NUMBER | --sampling=SAMPLING_NUMBER] [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
    
 Options:
-  -h --help                                 Show this screen.
-  --version                                 Show version.
-  -i <FILE>, --input=<FILE>                 Input csv
-  -a <ARGS>, --extra-args=<ARGS>            Extra args for the request
-  -c <CONCURRENT>, --concurrent=CONCURRENT  Concurrent request number
+  -h --help                                         Show this screen.
+  --version                                         Show version.
+  -i FILE, --input=FILE                             Input csv
+  -a ARGS, --extra-args=ARGS                        Extra args for the request
+  -n SAMPLING_NUMBER, --sampling SAMPLING_NUMBER    Sampling number [default: 1000]
+  -c CONCURRENT, --concurrent=CONCURRENT            Concurrent request number [default: 1]
 
 Example:
   bench.py bench --input=benchmark.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
   bench.py replot new_default.csv experimental.csv
+  bench.py sampling_bench 2.298255 2.411574 48.821590 48.898004 -n 1000  -c 4 -a 'datetime=20200320T100000'
   bench.py plot-latest 30
    
 """
 from __future__ import print_function
 import requests
-import json
 import datetime
 import numpy
 import tqdm
-import logging
 import pygal
 import os
 from config import logger
 import config
 from glob import glob
+import random
 
-NAVITIA_API_URL = os.getenv('NAVITIA_API_URL') 
+random.seed(42)
+
+NAVITIA_API_URL = os.getenv('NAVITIA_API_URL')
 NAVITIA_API_URL = NAVITIA_API_URL if NAVITIA_API_URL else config.NAVITIA_API_URL 
 
 COVERAGE = os.getenv('COVERAGE')
@@ -64,19 +68,19 @@ def parallel_process(array, function, n_workers=4, use_kwargs=False):
             [function(array[0]), function(array[1]), ...]
     """
     # If we set n_jobs to 1, just run a list comprehension. This is useful for benchmarking and debugging.
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import as_completed, ThreadPoolExecutor
     if n_workers == 1:
         return [function(**a) if use_kwargs else function(a) for a in tqdm.tqdm(array)]
 
     # Assemble the workers
-    with ProcessPoolExecutor(max_workers=n_workers) as pool:
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
         # Pass the elements of array into function
         if use_kwargs:
             futures = [pool.submit(function, **a) for a in array]
         else:
             futures = [pool.submit(function, a) for a in array]
         kwargs = {
-            'total': len(futures),
+            'total': len(array),
             'unit': 'it',
             'unit_scale': True,
             'leave': True
@@ -131,25 +135,17 @@ def _call_jormun(i, url):
     time2 = time.time()
     if r.status_code != 200:
         print('error occurred on the url: ', url)
-        return i, url, 0
+        return i, url, -1
     collapsed_time = (time2-time1)*1000.0
     return i, url, collapsed_time
 
 
-def call_jormun(reqs, scenario, concurrent, extra_args):
-    start_prod_date = get_coverage_start_production_date()
+def call_jormun(args, scenario, concurrent):
     logger.info("calling scenario: " + scenario)
     collapsed_time = []
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-
-    args = []
-    for i, r in enumerate(reqs):
-        req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
-        args.append({"i": i,
-                     "url": "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
-            NAVITIA_API_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario, extra_args)})
 
     out = parallel_process(args, _call_jormun, n_workers=concurrent, use_kwargs=True)
     out.sort(key=lambda x: x[0])
@@ -163,12 +159,21 @@ def call_jormun(reqs, scenario, concurrent, extra_args):
 
 
 def plot_per_request(array1, array2, label1='', label2=''):
-    line_chart = pygal.Line(show_x_labels=False)
+    line_chart = pygal.Line(show_x_labels=False, disable_xml_declaration=True)
     line_chart.title = 'Jormun Bench (in ms)'
     line_chart.x_labels = map(str, range(0, len(array1)))
     line_chart.add(label1, array1)
     line_chart.add(label2, array2)
     line_chart.render_to_file('output_per_request.svg')
+
+
+def plot_scenario_box(array1, array2, label1='', label2=''):
+    import numpy as np
+    box = pygal.Box()
+    box.title = 'Jormun Bench Per ScenarioBox (in ms)'
+    box.add(label1, array1)
+    box.add(label2, array2)
+    box.render_to_file('output_per_scenario_box.svg')
 
 
 def plot_normalized_box(array1, array2, label1='', label2=''):
@@ -183,10 +188,67 @@ def bench(args):
     reqs = parse_request_csv(args['--input'])
     extra_args = args['--extra-args'] or ''
     concurrent = int(args['--concurrent'] or 1)
-    collapsed_time_new_default = call_jormun(reqs, 'new_default', concurrent, extra_args)
-    collapsed_time_experimental = call_jormun(reqs, 'experimental', concurrent, extra_args)
+
+    def make_navitia_requests(reqs, scenario, extra_args):
+        res = []
+        start_prod_date = get_coverage_start_production_date()
+        for i, r in enumerate(reqs):
+            req_datetime = get_request_datetime(start_prod_date, int(r[2]), int(r[3]))
+            res.append({"i": i,
+                         "url": "{}/coverage/{}/journeys?from={}&to={}&datetime={}&_override_scenario={}&{}".format(
+                             NAVITIA_API_URL, COVERAGE, r[0], r[1], req_datetime.strftime('%Y%m%dT%H%M%S'), scenario,
+                             extra_args)})
+        return res
+
+    scenario = 'new_default'
+    collapsed_time_new_default = call_jormun(make_navitia_requests(reqs, scenario, extra_args), scenario, concurrent)
+    scenario = 'experimental'
+    collapsed_time_experimental = call_jormun(make_navitia_requests(reqs, scenario, extra_args), scenario, concurrent)
+
     plot_per_request(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
     plot_normalized_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+    plot_scenario_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+
+def sampling_bench(args):
+
+    min_lon = float(args['<min_lon>'])
+    max_lon = float(args['<max_lon>'])
+    min_lat = float(args['<min_lat>'])
+    max_lat = float(args['<max_lat>'])
+    n = int(args['--sampling'])
+
+    coords = []
+    for i in range(n):
+        from_coord = "{};{}".format(random.uniform(min_lon, max_lon),
+                                    random.uniform(min_lat, max_lat))
+        to_coord = "{};{}".format(random.uniform(min_lon, max_lon),
+                                  random.uniform(min_lat, max_lat))
+        coords.append((i, from_coord, to_coord))
+
+    def make_navitia_requests(coords, scenario, extra_args):
+        res = []
+        for c in coords:
+            i, f_coord, t_coord = c
+            res.append({"i": i,
+                        "url": "{}/coverage/{}/journeys?from={}&to={}&_override_scenario={}&{}".format(
+                               NAVITIA_API_URL, COVERAGE, f_coord, t_coord, scenario, extra_args)})
+        return res
+
+    extra_args = args['--extra-args'] or ''
+    concurrent = int(args['--concurrent'] or 1)
+    scenario = "new_default"
+    collapsed_time_new_default = call_jormun(make_navitia_requests(coords, scenario, extra_args),
+                                             scenario,
+                                             concurrent)
+
+    scenario = "experimental"
+    collapsed_time_experimental = call_jormun(make_navitia_requests(coords, scenario, extra_args),
+                                              scenario,
+                                              concurrent)
+
+    plot_per_request(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+    plot_normalized_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
+    plot_scenario_box(collapsed_time_new_default, collapsed_time_experimental, 'new_default', 'experimental')
 
 
 def get_times(csv_path):
@@ -210,8 +272,8 @@ def replot(args):
     file2 = files[1]
     time_arry1 = get_times(file1)
     time_arry2 = get_times(file2)
-    plot_per_request(time_arry1, time_arry2,file1, file2)    
-    plot_normalized_box(time_arry1, time_arry2,file1, file2)    
+    plot_per_request(time_arry1, time_arry2, file1, file2)
+    plot_normalized_box(time_arry1, time_arry2, file1, file2)
 
 
 def get_benched_coverage_from_output():
@@ -253,6 +315,8 @@ def main():
     logger.info('Running Benchmark on {}/{}'.format(NAVITIA_API_URL, COVERAGE))
     if args.get('bench'):
         bench(args)
+    if args.get('sampling_bench'):
+        sampling_bench(args)
     if args.get('replot'):
         replot(args)
     if args.get('plot-latest'):
