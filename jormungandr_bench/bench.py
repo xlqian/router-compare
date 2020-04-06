@@ -7,13 +7,15 @@ Usage:
   bench.py bench [-i FILE | --input=FILE] [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
   bench.py replot [<file> <file>]
   bench.py plot-latest N
-   
+  bench.py sample <min_lon> <max_lon> <min_lat> <max_lat> <size> [-a ARGS | --extra-args=ARGS] [-s SEED | --seed=SEED]
+
 Options:
   -h --help                                 Show this screen.
   --version                                 Show version.
-  -i <FILE>, --input=<FILE>                 Input csv (or stdin if missing)
-  -a <ARGS>, --extra-args=<ARGS>            Extra args for the request
-  -c <CONCURRENT>, --concurrent=CONCURRENT  Concurrent request number
+  -i FILE, --input=FILE                     Input csv (or stdin if missing)
+  -a ARGS, --extra-args=ARGS                Extra args for the request
+  -c CONCURRENT, --concurrent=CONCURRENT    Concurrent request number
+  -s SEED, --seed=SEED                      Random seed [default: 42]
 
 Example:
   bench.py bench --input=benchmark_example.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
@@ -36,7 +38,7 @@ import sortedcontainers
 from glob import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import fileinput
-
+import random
 
 NAVITIA_API_URL = os.getenv('NAVITIA_API_URL', config.NAVITIA_API_URL)
 COVERAGE = os.getenv('COVERAGE', config.COVERAGE)
@@ -81,14 +83,18 @@ def plot_normalized_box(array1, array2, label1='', label2=''):
     box.render_to_file('output_box.svg')
 
 
-def call_jormun(server, path, parameters, scenario_name, extra_args):
-    url = "{}{}?{}&_override_scenario={}&{}".format(server, path, parameters, scenario_name, extra_args)
+def call_jormun(server, coverage, path, parameters, scenario_name, extra_args):
+    import os.path
+    # remove excessive /
+    normpath = os.path.normpath('/'.join(['coverage', coverage, path]))
+
+    url = "{}/{}?{}&_override_scenario={}&{}".format(server, normpath, parameters, scenario_name, extra_args)
     ret, t = _call_jormun(url)
     return url, t, ret.status_code
 
 
-def call_jormun_scenario(i, server, path, parameters, extra_args, scenario):
-    return i, call_jormun(server, path, parameters, scenario, extra_args)
+def call_jormun_scenario(i, server, coverage, path, parameters, extra_args, scenario):
+    return i, call_jormun(server, coverage, path, parameters, scenario, extra_args)
 
 
 class Scenario(object):
@@ -104,7 +110,7 @@ class Scenario(object):
 
 def submit_work(pool, reqs, extra_args, scenario):
     for i, (path, params) in enumerate(reqs):
-        args = [i, NAVITIA_API_URL, path, params, extra_args, scenario]
+        args = [i, NAVITIA_API_URL, COVERAGE, path, params, extra_args, scenario]
         yield pool.submit(call_jormun_scenario, *args)
 
 
@@ -195,6 +201,30 @@ def plot_latest(args):
         box.render_to_file(os.path.join(DISTANT_BENCH_OUTPUT, 'rendering', '{}.svg'.format(coverage_name)))
 
 
+def sample(args):
+    min_lon = float(args['<min_lon>'])
+    max_lon = float(args['<max_lon>'])
+    min_lat = float(args['<min_lat>'])
+    max_lat = float(args['<max_lat>'])
+    n = int(args['<size>'])
+
+    extra_args = args['--extra-args'] or ''
+
+    header = ['path', 'parameters']
+    print(','.join(header))
+
+    path = '/journeys'
+
+    for _ in range(n):
+        from_coord = "{};{}".format(random.uniform(min_lon, max_lon),
+                                    random.uniform(min_lat, max_lat))
+        to_coord = "{};{}".format(random.uniform(min_lon, max_lon),
+                                  random.uniform(min_lat, max_lat))
+
+        params = 'from={}&to={}&{}'.format(from_coord, to_coord, extra_args)
+        print(','.join([path, params]))
+
+
 def parse_args():
     from docopt import docopt
     return docopt(__doc__, version='Jormungandr Bench V0.0.1')
@@ -209,6 +239,8 @@ def main():
         replot(args)
     if args.get('plot-latest'):
         plot_latest(args)
+    if args.get('sample'):
+        sample(args)
 
 
 if __name__ == '__main__':

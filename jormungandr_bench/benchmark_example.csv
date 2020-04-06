@@ -1,7 +1,6 @@
 path,parameters
-"/v1/coverage/sandbox/",
-"/v1/coverage/sandbox/status",
-"/v1/coverage/sandbox/lines",
-"/v1/coverage/sandbox/lines","count=1"
-"/v1/coverage/sandbox/journeys","from=2.31681%3B48.87126&to=2.37244%3B48.85884&"
-"/v1/coverage/sandbox/journeys","from=2.31887%3B48.83873&to=2.35286%3B48.88300&"
+/status,
+/lines,
+/lines,count=1
+/journeys,from=2.31681%3B48.87126&to=2.37244%3B48.85884&
+/journeys,from=2.31887%3B48.83873&to=2.35286%3B48.88300&
