@@ -22,7 +22,7 @@ Example:
   cat benchmark_example.csv | bench.py bench  -a 'first_section_mode[]=car&last_section_mode[]=car'
   bench.py replot new_default.csv experimental.csv
   bench.py plot-latest 30
-   
+  python bench.py sample 2.298255 2.411574 48.821590 48.898 1000 -a '&datetime=20200318T100000'
 """
 from __future__ import print_function
 import requests
@@ -66,20 +66,22 @@ def _call_jormun(url):
     return r, elapsed_time
 
 
-def plot_per_request(array1, array2, label1='', label2=''):
+def plot_per_request(data):
     line_chart = pygal.Line(show_x_labels=False)
     line_chart.title = 'Jormun Bench (in ms)'
-    line_chart.x_labels = map(str, range(0, len(array1)))
-    line_chart.add(label1, array1)
-    line_chart.add(label2, array2)
+    for label, array in data:
+        line_chart.add(label, array)
+        line_chart.x_labels = map(str, range(0, len(array)))
     line_chart.render_to_file('output_per_request.svg')
 
 
-def plot_normalized_box(array1, array2, label1='', label2=''):
-    import numpy as np
+def plot_normalized_box(data):
     box = pygal.Box()
-    box.title = 'Jormun Bench Box Comparaison (in ms)'
-    box.add('Time Ratio: {}/{}'.format(label2, label1), np.array(array2) / np.array(array1))
+    box.title = 'Jormun Bench Box'
+
+    for label, array in data:
+        box.add(label, array)
+
     box.render_to_file('output_box.svg')
 
 
@@ -143,8 +145,8 @@ def bench(args):
     new_default_times = scenarios['new_default'].times.values()
     experimental_times = scenarios['experimental'].times.values()
     
-    plot_per_request(new_default_times, experimental_times, 'new_default', 'experimental')
-    plot_normalized_box(new_default_times, experimental_times, 'new_default', 'experimental')
+    plot_per_request([('new_default', new_default_times), ('experimental', experimental_times)])
+    plot_normalized_box([('new_default', new_default_times), ('experimental', experimental_times)])
 
 
 def get_times(csv_path):
@@ -168,8 +170,8 @@ def replot(args):
     file2 = files[1]
     time_arry1 = get_times(file1)
     time_arry2 = get_times(file2)
-    plot_per_request(time_arry1, time_arry2, file1, file2)
-    plot_normalized_box(time_arry1, time_arry2, file1, file2)
+    plot_per_request([(file1, time_arry1), (file2, time_arry2)])
+    plot_normalized_box([(file1, time_arry1), (file2, time_arry2)])
 
 
 def get_benched_coverage_from_output():
