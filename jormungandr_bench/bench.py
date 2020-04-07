@@ -4,7 +4,7 @@
 Usage:
   bench.py (-h | --help)
   bench.py --version
-  bench.py bench [-i FILE | --input=FILE] [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT]
+  bench.py bench [-i FILE | --input=FILE] [-a ARGS | --extra-args=ARGS] [-c CONCURRENT | --concurrent=CONCURRENT] [--scenario=SCENARIO]...
   bench.py replot [<file> <file>]
   bench.py plot-latest N
   bench.py sample <min_lon> <max_lon> <min_lat> <max_lat> <size> [-a ARGS | --extra-args=ARGS] [-s SEED | --seed=SEED]
@@ -15,14 +15,15 @@ Options:
   -i FILE, --input=FILE                     Input csv (or stdin if missing)
   -a ARGS, --extra-args=ARGS                Extra args for the request
   -c CONCURRENT, --concurrent=CONCURRENT    Concurrent request number
+  --scenario=SCENARIO                       Scenarios [default: new_default  experimental]
   -s SEED, --seed=SEED                      Random seed [default: 42]
 
 Example:
   bench.py bench --input=benchmark_example.csv -a 'first_section_mode[]=car&last_section_mode[]=car'
-  cat benchmark_example.csv | bench.py bench  -a 'first_section_mode[]=car&last_section_mode[]=car'
+  cat benchmark_example.csv | bench.py bench  -a 'first_section_mode[]=car&last_section_mode[]=car' --scenario= new_default
   bench.py replot new_default.csv experimental.csv
   bench.py plot-latest 30
-  python bench.py sample 2.298255 2.411574 48.821590 48.898 1000 -a '&datetime=20200318T100000'
+  bench.py sample 2.298255 2.411574 48.821590 48.898 1000 -a '&datetime=20200318T100000'
 """
 from __future__ import print_function
 import requests
@@ -95,7 +96,7 @@ def call_jormun(server, coverage, path, parameters, scenario_name, extra_args):
     return url, t, ret.status_code
 
 
-def call_jormun_scenario(i, server, coverage, path, parameters, extra_args, scenario):
+def call_jormun_scenario(i, server, coverage, path, parameters, scenario, extra_args):
     return i, call_jormun(server, coverage, path, parameters, scenario, extra_args)
 
 
@@ -127,7 +128,7 @@ def bench(args):
 
     reqs = make_requests(args['--input'] or '-')
 
-    scenarios = {s: Scenario(s, OUTPUT_DIR) for s in ['new_default', 'experimental']}
+    scenarios = {s: Scenario(s, OUTPUT_DIR) for s in args['--scenario']}
 
     for name, scenario in scenarios.items():
         logger.info('Launching bench for {}'.format(name))
@@ -142,11 +143,8 @@ def bench(args):
                 print("{},{},{},{}".format(idx, url, time, status_code), file=output)
                 scenario.times[idx] = time
 
-    new_default_times = scenarios['new_default'].times.values()
-    experimental_times = scenarios['experimental'].times.values()
-    
-    plot_per_request([('new_default', new_default_times), ('experimental', experimental_times)])
-    plot_normalized_box([('new_default', new_default_times), ('experimental', experimental_times)])
+    plot_per_request([(name, s.times.values()) for name, s in scenarios.items()])
+    plot_normalized_box([(name, s.times.values()) for name, s in scenarios.items()])
 
 
 def get_times(csv_path):
